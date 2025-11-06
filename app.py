@@ -1,0 +1,121 @@
+from flask import Flask, request, abort
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import requests
+from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+WEBAPP_URL = os.getenv("GOOGLE_SHEET_WEBAPP_URL")
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
+
+app = Flask(__name__)
+
+
+# ===== 匯率查詢 =====
+def get_krw_to_twd_rate():
+    # 這裡使用簡單抓匯率 API
+    try:
+        res = requests.get("https://tw.rter.info/capi.php")
+        rate = res.json()["USDTWD"]["Exrate"]
+        krw_to_twd = rate / 0.00027  # 假設 1 KRW ~ 0.027 TWD，可依實際換算
+        return 0.027  # fallback
+    except:
+        return 0.027
+
+
+# ===== 記帳函數 =====
+def add_expense(text):
+    # 格式: 項目,金額,幣別
+    try:
+        item, amount, currency = text.split(",")
+        amount = float(amount)
+        currency = currency.upper()
+        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rate = get_krw_to_twd_rate()
+
+        if currency == "KRW":
+            twd = round(amount * rate, 2)
+            krw = amount
+        else:
+            twd = amount
+            krw = round(amount / rate, 0)
+
+        # 發送到 Google Apps Script
+        payload = {
+            "date": date,
+            "item": item,
+            "currency": currency,
+            "twd": twd,
+            "krw": krw,
+        }
+        requests.post(WEBAPP_URL, json=payload)
+
+        return f"已記帳：{item} {amount} {currency}\n台幣: {twd} TWD\n韓元: {krw} KRW"
+    except Exception as e:
+        return f"記帳失敗，請確認格式: 項目,金額,幣別\n錯誤訊息: {str(e)}"
+
+
+# ===== 韓元對照表函數 =====
+def krw_to_twd_table():
+    krw_list = [
+        1000,
+        11000,
+        12000,
+        13000,
+        14000,
+        15000,
+        16000,
+        17000,
+        18000,
+        19000,
+        20000,
+        25000,
+        30000,
+        35000,
+        40000,
+        45000,
+        50000,
+    ]
+    rate = get_krw_to_twd_rate()
+    result = "韓元→台幣對照表:\n"
+    for krw in krw_list:
+        twd = round(krw * rate, 2)
+        result += f"{krw} KRW → {twd} TWD\n"
+    result += "50000 KRW以上 → 請自行乘上匯率"
+    return result
+
+
+# ===== Line Bot 主程式 =====
+@app.route("/callback", methods=["POST"])
+def callback():
+    signature = request.headers["X-Line-Signature"]
+    body = request.get_data(as_text=True)
+
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK"
+
+
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    text = event.message.text.strip()
+
+    if text.lower() == "對照表":
+        reply = krw_to_twd_table()
+    else:
+        reply = add_expense(text)
+
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+
+
+if __name__ == "__main__":
+    app.run(port=8000)
