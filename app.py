@@ -20,14 +20,26 @@ app = Flask(__name__)
 
 # ===== 匯率查詢 =====
 def get_krw_to_twd_rate():
-    # 這裡使用簡單抓匯率 API
     try:
-        res = requests.get("https://tw.rter.info/capi.php")
-        rate = res.json()["USDTWD"]["Exrate"]
-        krw_to_twd = rate / 0.00027  # 假設 1 KRW ~ 0.027 TWD，可依實際換算
-        return 0.027  # fallback
-    except:
-        return 0.027
+        # 使用無需 API Key 的 Open Access 端點
+        url = "https://open.er-api.com/v6/latest/KRW"
+        res = requests.get(url, timeout=10)
+        res.raise_for_status()
+        data = res.json()
+        # 檢查回傳結果
+        if data.get("result") == "success" and "rates" in data:
+            # 從 KRW 基底換算為 TWD
+            rate = data["rates"].get("TWD")
+            if rate is None:
+                # 若 TWD 不在其中，跳 fallback
+                raise ValueError("TWD rate missing in response")
+            return rate
+        else:
+            raise ValueError(f"Unexpected API result: {data}")
+    except Exception as e:
+        print("匯率抓取失敗:", e)
+        # fallback 值（你可以再調整此值）
+        return 0.022
 
 
 # ===== 記帳函數 =====
