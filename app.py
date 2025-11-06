@@ -67,7 +67,11 @@ def add_expense(text):
             "twd": twd,
             "krw": krw,
         }
-        requests.post(WEBAPP_URL, json=payload)
+        if WEBAPP_URL:
+            requests.post(WEBAPP_URL, json=payload)
+        else:
+            raise ValueError(
+                "GOOGLE_SHEET_WEBAPP_URL environment variable is not set")
 
         return f"已記帳：{item} {amount} {currency}\n台幣: {twd} TWD\n韓元: {krw} KRW"
     except Exception as e:
@@ -105,10 +109,18 @@ def krw_to_twd_table():
 
 
 # ===== Line Bot 主程式 =====
+@app.route("/", methods=["GET"])
+def home():
+    return "LINE Bot is running! Please use /callback for webhook."
+
+
 @app.route("/callback", methods=["POST"])
 def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
+    
+    # 記錄收到的請求內容
+    print(f"Received webhook: {body}")
 
     try:
         handler.handle(body, signature)
@@ -119,15 +131,24 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    text = event.message.text.strip()
+    try:
+        # 檢查是否為重發的訊息
+        if hasattr(event, 'delivery_context') and event.delivery_context.is_redelivery:
+            print("Ignoring redelivered message")
+            return
+        
+        text = event.message.text.strip()
 
-    if text.lower() == "對照表":
-        reply = krw_to_twd_table()
-    else:
-        reply = add_expense(text)
+        if text.lower() == "對照表":
+            reply = krw_to_twd_table()
+        else:
+            reply = add_expense(text)
 
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+    except Exception as e:
+        # 記錄錯誤但不中斷程式
+        print(f"Error handling message: {str(e)}")
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
