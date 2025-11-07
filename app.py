@@ -70,8 +70,7 @@ def add_expense(text):
         if WEBAPP_URL:
             requests.post(WEBAPP_URL, json=payload)
         else:
-            raise ValueError(
-                "GOOGLE_SHEET_WEBAPP_URL environment variable is not set")
+            raise ValueError("GOOGLE_SHEET_WEBAPP_URL environment variable is not set")
 
         return f"已記帳：{item} {amount} {currency}\n台幣: {twd} TWD\n韓元: {krw} KRW"
     except Exception as e:
@@ -118,7 +117,7 @@ def home():
 def callback():
     signature = request.headers["X-Line-Signature"]
     body = request.get_data(as_text=True)
-    
+
     # 記錄收到的請求內容
     print(f"Received webhook: {body}")
 
@@ -133,10 +132,10 @@ def callback():
 def handle_message(event):
     try:
         # 檢查是否為重發的訊息
-        if hasattr(event, 'delivery_context') and event.delivery_context.is_redelivery:
+        if hasattr(event, "delivery_context") and event.delivery_context.is_redelivery:
             print("Ignoring redelivered message")
             return
-        
+
         text = event.message.text.strip()
 
         if text.lower() == "對照表":
