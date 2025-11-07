@@ -68,6 +68,7 @@ def add_expense(text):
             "currency": currency,
             "twd": twd,
             "krw": krw,
+            "rate": rate,
         }
         if WEBAPP_URL:
             requests.post(WEBAPP_URL, json=payload)
