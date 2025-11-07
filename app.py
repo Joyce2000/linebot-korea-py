@@ -3,7 +3,7 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 
@@ -49,7 +49,9 @@ def add_expense(text):
         item, amount, currency = text.split(",")
         amount = float(amount)
         currency = currency.upper()
-        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 建立台灣時區 (UTC+8)
+        tz_TW = timezone(timedelta(hours=8))
+        date = datetime.now(tz_TW).strftime("%Y-%m-%d %H:%M:%S")
         rate = get_krw_to_twd_rate()
 
         if currency == "KRW":
